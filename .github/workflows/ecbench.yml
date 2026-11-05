@@ -17,6 +17,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Fetch pinned crypto source
         run: ./tools/bootstrap_crypto.sh
+      - name: Warn when the crypto pin is old
+        run: |
+          age=$(( ( $(date +%s) - $(git -C deps/crypto log -1 --format=%ct) ) / 86400 ))
+          echo "crypto pin is $age days old"
+          if (( age > 14 )); then
+            echo "::warning title=crypto pin::the pinned crypto commit is $age days old; run the 'crypto pin bump' workflow"
+          fi
       - name: Check CLI
         run: cargo check --locked --bin ecbench
       - name: Build release CLI

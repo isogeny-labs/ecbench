@@ -16,6 +16,7 @@ _(none pinned — set one with `/goal <text>`)_
 
 ## Active items (top = next)
 
+- [x] Standardize the repository CI check contract (Codex, started 2026-11-17, branch codex/standard-ci-check, PR #8)
 <!-- One line per task, added as the task's first step with its draft PR:
 - [ ] <task> (<runtime>, started YYYY-MM-DD, branch <branch>, PR #<n>) -->
 - [x] Licence files and SECURITY.md (disclosure, acceptable use, dual-use) per business action plan F3/F4/F5 (Claude Code, completed 2026-11-22; started 2026-11-22, branch claude/licence-security-policy-20261122, PR #9)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CRYPTO_SHA=0dc9ef4a7075cf9a2b809d2792ae5d3911b0c0f7
+readonly CRYPTO_SHA=4268660fa364601cbb6c42f4099677209aa35213
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly CRYPTO_DIR="$REPO_ROOT/deps/crypto"
 
@@ -32,10 +32,15 @@ cat > "$CRYPTO_DIR/.git/info/sparse-checkout" <<'PATTERNS'
 /docs/ic/calibration.json
 /docs/ic/boundary_targets.json
 /docs/ecbench/schema.sql
+/docs/ecbench/specs/
+/docs/bounds/
 PATTERNS
 
 git -C "$CRYPTO_DIR" fetch --no-tags --depth=1 --filter=blob:none origin "$CRYPTO_SHA"
 git -C "$CRYPTO_DIR" checkout --detach -q "$CRYPTO_SHA"
+# The path crates Cargo resolves and the files the library's sources embed,
+# read from the pinned source itself (tools/crypto_inputs.py).
+python3 -I "$REPO_ROOT/tools/crypto_inputs.py" "$CRYPTO_DIR" >> "$CRYPTO_DIR/.git/info/sparse-checkout"
 git -C "$CRYPTO_DIR" sparse-checkout reapply
 actual="$(git -C "$CRYPTO_DIR" rev-parse HEAD)"
 if [[ "$actual" != "$CRYPTO_SHA" ]]; then

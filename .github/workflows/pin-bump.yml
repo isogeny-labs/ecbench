@@ -1,0 +1,82 @@
+name: crypto pin bump
+
+# Weekly: move the crypto pin to crypto's main, re-copy the CLI, run the same
+# checks as ecbench.yml, and open (or update) a pull request with the result.
+# A pull request opened with GITHUB_TOKEN does not trigger other workflows, so
+# the checks run here and their outcome goes in the pull request body.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: crypto-pin-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BRANCH: automation/crypto-pin-bump
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Find crypto main
+        id: pin
+        run: |
+          new="$(git ls-remote https://github.com/aburan28/crypto.git refs/heads/main | cut -f1)"
+          old="$(sed -n 's/^readonly CRYPTO_SHA=//p' tools/bootstrap_crypto.sh)"
+          [[ "$new" =~ ^[0-9a-f]{40}$ ]] || { echo "bad crypto sha: $new" >&2; exit 1; }
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          if [[ "$new" == "$old" ]]; then echo "same=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Move the pin and re-copy the CLI
+        if: steps.pin.outputs.same != 'true'
+        run: |
+          sed -i "s/^readonly CRYPTO_SHA=.*/readonly CRYPTO_SHA=${{ steps.pin.outputs.new }}/" tools/bootstrap_crypto.sh
+          ./tools/bootstrap_crypto.sh
+          rm -rf src/bin/ecbench src/bin/ecbench.rs
+          cp deps/crypto/src/bin/ecbench.rs src/bin/ecbench.rs
+          cp -r deps/crypto/src/bin/ecbench src/bin/ecbench
+      - name: Check, build, smoke session, verify, compare
+        if: steps.pin.outputs.same != 'true'
+        id: checks
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            cargo check --bin ecbench
+            cargo build --release --bin ecbench
+            ./target/release/ecbench run --spec deps/crypto/docs/ecbench/specs/smoke-prime.json --out "$RUNNER_TEMP/smoke" --cpus none --quiet
+            ./target/release/ecbench verify --dir "$RUNNER_TEMP/smoke" --replay-all --exit-code | tail -1
+            ./target/release/ecbench compare --dir "$RUNNER_TEMP/smoke" --a rho-neg --b bsgs-neg > /dev/null
+          } 2>&1 | tee "$RUNNER_TEMP/checks.log"
+      - name: Open or update the pull request
+        if: steps.pin.outputs.same != 'true'
+        run: |
+          new="${{ steps.pin.outputs.new }}"; old="${{ steps.pin.outputs.old }}"
+          if [[ "${{ steps.checks.outcome }}" == "success" ]]; then
+            result="All checks passed: \`cargo check\`, release build, smoke session, \`verify --replay-all\`, \`compare\`."
+          else
+            result="**Checks failed.** The CLI copy probably needs a dependency the pinned crate added (compare \`deps/crypto/Cargo.toml\` with \`Cargo.toml\`). Last lines of the log:"$'\n\n```\n'"$(tail -n 30 "$RUNNER_TEMP/checks.log")"$'\n```'
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A Cargo.lock src tools
+          git commit -m "Bump the crypto pin to ${new:0:8}" -m "Automated: re-copies the ecbench CLI from crypto ${new}."
+          git push --force origin "$BRANCH"
+          body="Moves the crypto pin from \`${old:0:8}\` to \`${new:0:8}\` ([diff](https://github.com/aburan28/crypto/compare/${old}...${new})) and re-copies the CLI."$'\n\n'"$result"$'\n\n'"Opened by \`.github/workflows/pin-bump.yml\`. Its own CI does not run on pull requests opened by the workflow token; the checks above ran in [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --title "Bump the crypto pin to ${new:0:8}" --body "$body"
+          else
+            gh pr create --head "$BRANCH" --base main --title "Bump the crypto pin to ${new:0:8}" --body "$body"
+          fi
+      - name: Fail the run when the checks failed
+        if: steps.checks.outcome == 'failure'
+        run: exit 1

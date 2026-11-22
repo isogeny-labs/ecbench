@@ -6,3 +6,5 @@
 /research/golden-smallfields/*.egg-info/
 /research/golden-smallfields/build/lib/
 /research/golden-smallfields/build/bdist.*/
+__pycache__/
+*.pyc

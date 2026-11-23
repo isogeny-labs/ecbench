@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CRYPTO_SHA=4268660fa364601cbb6c42f4099677209aa35213
+readonly CRYPTO_SHA=143a0b91fb00b08f02a7e0850aec7f245a8d1516
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly CRYPTO_DIR="$REPO_ROOT/deps/crypto"
 
